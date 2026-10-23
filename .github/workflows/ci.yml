@@ -1,0 +1,30 @@
+name: C++ CI and fault injection
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+        sanitizer: [none, address-undefined, thread]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: |
+          FLAGS='-O1 -g -fno-omit-frame-pointer'
+          if [ '${{ matrix.sanitizer }}' = 'address-undefined' ]; then FLAGS="$FLAGS -fsanitize=address,undefined"; fi
+          if [ '${{ matrix.sanitizer }}' = 'thread' ]; then FLAGS="$FLAGS -fsanitize=thread"; fi
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER='${{ matrix.compiler }}' -DCMAKE_CXX_FLAGS="$FLAGS"
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Tests
+        run: ctest --test-dir build --output-on-failure
+      - name: Million-tick fault-injection benchmark
+        if: matrix.compiler == 'g++' && matrix.sanitizer == 'none'
+        run: ./build/tickerplant_bench 1000000 | tee benchmark-result.txt
+      - uses: actions/upload-artifact@v4
+        if: matrix.compiler == 'g++' && matrix.sanitizer == 'none'
+        with:
+          name: million-tick-result
+          path: benchmark-result.txt
