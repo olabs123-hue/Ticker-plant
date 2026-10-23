@@ -26,7 +26,7 @@ public:
  FeedHandler(uint64_t first,Request request,Deliver deliver):next_(first),request_(std::move(request)),deliver_(std::move(deliver)){}
  void receive(Tick tick){
   if(tick.sequence<next_||pending_.count(tick.sequence))return;
-  if(tick.sequence>next_){uint64_t start=std::max(next_,requested_high_+1);if(start<tick.sequence){request_(start,tick.sequence-1);requested_high_=tick.sequence-1;}}
+  if(tick.sequence>next_){uint64_t start=std::max(next_,requested_high_+1);while(start<tick.sequence){while(start<tick.sequence&&pending_.count(start))++start;if(start>=tick.sequence)break;uint64_t end=start;while(end+1<tick.sequence&&!pending_.count(end+1))++end;request_(start,end);start=end+1;}requested_high_=std::max(requested_high_,tick.sequence-1);}
   pending_.emplace(tick.sequence,tick);
   while(true){auto it=pending_.find(next_);if(it==pending_.end())break;deliver_(it->second);pending_.erase(it);++next_;}
  }
